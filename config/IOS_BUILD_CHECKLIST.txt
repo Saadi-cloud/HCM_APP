@@ -1,0 +1,51 @@
+═══════════════════════════════════════════════════════════════
+  iOS BUILD SE PEHLE — VERSION UPDATE CHECKLIST
+  (Har nayi iOS build se pehle yeh 4 jagah update karein)
+═══════════════════════════════════════════════════════════════
+
+① app.json → "version" (line ~6)
+   Example: "1.0.6" → "1.0.7"
+   Yeh App Store par dikhai dene wala version hai.
+
+② app.json → "ios" → "buildNumber" (line ~20)
+   Example: "6" → "7"
+   Har nayi build par +1 karein.
+   Note: eas.json mein autoIncrement:true hai — EAS khud bhi badha sakta hai.
+
+③ app.json → "extra" → "iosLatestVersion" (line ~78)
+   Example: "1.0.6" → "1.0.7"
+   Same hona chahiye jo "version" hai (fallback ke liye).
+
+④ config/ios-version.json → "latestVersion" (line ~3)
+   Example: "1.0.6" → "1.0.7"
+   Same version yahan bhi likhein.
+   Phir is file ko server par upload karein (step ⑤).
+
+
+═══════════════════════════════════════════════════════════════
+  App Store par build LIVE hone ke BAAD (nayi app build NAHI)
+═══════════════════════════════════════════════════════════════
+
+⑤ Server par JSON upload karein:
+   Local file : config/ios-version.json
+   Server URL : https://cssapp.dwp.com.pk/ios-version.json
+
+   Sirf latestVersion update karein taake purane users ko popup aaye.
+   Nayi app build ki zaroorat NAHI — sirf server file replace karein.
+
+
+═══════════════════════════════════════════════════════════════
+  BUILD COMMANDS
+═══════════════════════════════════════════════════════════════
+
+   eas build --platform ios
+   eas submit --platform ios
+
+
+═══════════════════════════════════════════════════════════════
+  AUTO — in jagahon par manually change NAHI karna
+═══════════════════════════════════════════════════════════════
+
+   • screens/LoginScreen.jsx — version app.json se auto aata hai
+   • components/IOSUpdatePopup.jsx — server JSON se check karta hai
+   • utils/appVersion.js — logic file hai, version yahan nahi likhte

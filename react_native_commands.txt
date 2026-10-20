@@ -1,0 +1,44 @@
+npx create-expo-app Dwp --template blank // command for react native app with js
+npm install -g eas-cli  // command for instal eas cli globally
+eas build -p android --profile preview // command for build android apk
+npx expo-doctor@latest --verbose  // most important command for check the build and dependencies issues.
+npx expo install --fix // command for fix the expo dependencies issues
+eas build --platform android --profile development // command for android development build
+eas whoami //// command for check ehich user is login
+npx expo start --dev-client  // really important command when you use both web opener and app opener that is command for development build open
+eas build --platform ios --profile development // command for IOS development build for simulator
+eas device:create   // command for create ios device for development build
+eas build --platform android  // command for android production build
+eas build --platform ios --profile development // command for ios development build
+eas build --platform ios // command for ios production build
+eas submit --platform ios // command for submit the build on App store connect
+
+// ═══════════════════════════════════════════════════════════════
+// OTA AUTO UPDATE (EAS Update) — JS/assets to ALL user devices
+// Docs: https://docs.expo.dev/eas-update/getting-started/
+// ═══════════════════════════════════════════════════════════════
+// After ONE new store/native build that includes expo-updates:
+//
+// Publish JS fix to production users (no App Store / Play review):
+eas update --channel production --message "Bug fix description"
+//
+// Publish to internal preview builds:
+eas update --channel preview --message "QA test update"
+//
+// Users get the update on next app open (or when returning to app).
+// Native changes (new libs, permissions, plugins) still need:
+eas build --platform android
+eas build --platform ios
+// ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// iOS BUILD SE PEHLE — VERSION UPDATE (detail: config/IOS_BUILD_CHECKLIST.txt)
+// ═══════════════════════════════════════════════════════════════
+// ① app.json → "version"              (e.g. 1.0.6 → 1.0.7)
+// ② app.json → "ios.buildNumber"      (e.g. "6" → "7", har build +1)
+// ③ app.json → "extra.iosLatestVersion" (same as version)
+// ④ config/ios-version.json → "latestVersion" (same as version)
+//
+// App Store LIVE ke BAAD (build NAHI, sirf server upload):
+// ⑤ config/ios-version.json → upload to https://cssapp.dwp.com.pk/ios-version.json
+// ═══════════════════════════════════════════════════════════════
