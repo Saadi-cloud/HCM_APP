@@ -1,12 +1,58 @@
 import { api } from "../utils/Api";
-import { addDays, parseApiDateTime } from "../utils/dateTime";
+import { addDays, apiDateKey, parseApiDateTime } from "../utils/dateTime";
 import {
   asRecordList,
+  extractSavedPunch,
   extractSavedRecord,
   findMatchingCheckIn,
   findMatchingCheckOut,
+  findMatchingPunch,
+  normalizePunch,
   normalizeRecord,
 } from "./attendancePayload";
+
+export async function fetchPunchList(employeeId, fromDateKey, toDateKey) {
+  const response = await api.get("/api/HrAttPunchRaw/GetHrAttPunchRawList", {
+    params: { employeeId, fromDate: fromDateKey, toDate: toDateKey },
+  });
+  return asRecordList(response?.data)
+    .map(normalizePunch)
+    .filter((punch) => punch && Number(punch.employeE_ID) === Number(employeeId));
+}
+
+export async function submitPunch(payload) {
+  let saved = null;
+  let requestError = null;
+  try {
+    const response = await api.post("/api/HrAttPunchRaw/SaveHrAttPunchRaw", payload);
+    saved = extractSavedPunch(response?.data);
+  } catch (error) {
+    requestError = error;
+  }
+
+  const punchAt = parseApiDateTime(payload.puncH_DATETIME);
+  const dateKey = apiDateKey(payload.puncH_DATETIME);
+  let confirmed = null;
+  try {
+    const punches = await fetchPunchList(payload.employeE_ID, addDays(dateKey, -1), addDays(dateKey, 1));
+    confirmed =
+      (saved && punches.find((punch) => Number(punch.puncH_ID) === Number(saved.puncH_ID))) ||
+      findMatchingPunch(punches, {
+        employeeId: payload.employeE_ID,
+        punchType: payload.puncH_TYPE,
+        punchAt,
+      });
+  } catch (error) {
+    if (requestError) throw requestError;
+    if (saved && Number(saved.employeE_ID) === Number(payload.employeE_ID)) return saved;
+    throw error;
+  }
+
+  if (confirmed) return confirmed;
+  if (requestError) throw requestError;
+  if (saved && Number(saved.employeE_ID) === Number(payload.employeE_ID)) return saved;
+  throw new Error("The server did not confirm the punch. Your attendance was not recorded.");
+}
 
 export async function fetchAttendanceList(employeeId, fromDateKey, toDateKey) {
   const response = await api.get("/api/HrAttDaily/GetHrAttDailyList", {
@@ -86,6 +132,9 @@ export async function submitCheckOut(payload) {
 export function getAttendanceErrorMessage(error) {
   if (error?.code === "ECONNABORTED") {
     return "The request timed out. Your attendance may not be saved — check your attendance history.";
+  }
+  if (error?.punchSaved) {
+    return "Your punch was logged, but the attendance record could not be saved. Try again — the same punch time will be reused.";
   }
   if (!error?.response) {
     return error?.message || "Unable to reach the payroll server. Check your connection.";

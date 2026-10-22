@@ -164,6 +164,80 @@ export function findMatchingCheckIn(records, { employeeId, dateKey, actualIn }) 
   );
 }
 
+export const PUNCH_TYPES = { IN: "IN", OUT: "OUT" };
+
+const PUNCH_FIELDS = [
+  "puncH_ID",
+  "employeE_ID",
+  "puncH_DATETIME",
+  "devicE_ID",
+  "devicE_PUNCH_ID",
+  "puncH_TYPE",
+  "source",
+  "imporT_BATCH_NO",
+  "imporT_DATE",
+  "latitude",
+  "longitude",
+  "puncH_TAG",
+];
+
+export function normalizePunch(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const byLowerKey = {};
+  Object.keys(raw).forEach((key) => {
+    byLowerKey[lowerKey(key)] = raw[key];
+  });
+  const punch = {};
+  PUNCH_FIELDS.forEach((field) => {
+    const value = byLowerKey[lowerKey(field)];
+    punch[field] = value === undefined ? null : value;
+  });
+  return punch;
+}
+
+export function extractSavedPunch(payload) {
+  const candidate = payload?.data && !Array.isArray(payload.data) ? payload.data : payload;
+  const punch = normalizePunch(candidate);
+  if (!punch || !(Number(punch.puncH_ID) > 0)) return null;
+  return punch;
+}
+
+export function buildPunchPayload({ employeeId, punchType, punchAt, position }) {
+  if (!(Number(employeeId) > 0)) throw new Error("A valid employee ID is required.");
+  if (!Object.values(PUNCH_TYPES).includes(punchType)) throw new Error("The punch type is invalid.");
+  if (punchAt == null) throw new Error("The punch time is missing.");
+  const latitude = Number(position?.latitude);
+  const longitude = Number(position?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new Error("Your current location is required for the punch.");
+  }
+
+  return {
+    puncH_ID: 0,
+    employeE_ID: Number(employeeId),
+    puncH_DATETIME: formatBusinessDateTime(punchAt),
+    devicE_ID: "MOBILE-APP",
+    devicE_PUNCH_ID: null,
+    puncH_TYPE: punchType,
+    source: "MOBILE",
+    latitude: Number(latitude.toFixed(6)),
+    longitude: Number(longitude.toFixed(6)),
+    puncH_TAG: "MOBILE_APP",
+  };
+}
+
+export function findMatchingPunch(punches, { employeeId, punchType, punchAt }) {
+  return (
+    punches.find(
+      (punch) =>
+        Number(punch.employeE_ID) === Number(employeeId) &&
+        String(punch.puncH_TYPE ?? "").toUpperCase() === punchType &&
+        String(punch.source ?? "").toUpperCase() === "MOBILE" &&
+        sameMinute(parseApiDateTime(punch.puncH_DATETIME), punchAt)
+    ) ?? null
+  );
+}
+
 export function findMatchingCheckOut(records, { attendanceId, actualOut }) {
   return (
     records.find(

@@ -8,6 +8,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.dwp.hcm",
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -38,6 +39,7 @@
       "expo-font"
     ],
     "android": {
+      "package": "com.dwp.hcm",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -47,6 +49,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3e43b3e6-3b3d-4090-b644-1e6ebc98610e"
+      }
     }
   }
 }

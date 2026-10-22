@@ -20,8 +20,18 @@ import useAttendanceStatus, { deriveAttendanceState } from "../hooks/useAttendan
 import LocationStatus from "../components/LocationStatus";
 import AttendanceModal, { CAPTURE_TYPES } from "../components/AttendanceModal";
 import AttendanceSuccessModal from "../components/AttendanceSuccessModal";
-import { buildCheckInPayload, buildCheckOutPayload } from "../services/attendancePayload";
-import { getAttendanceErrorMessage, submitCheckIn, submitCheckOut } from "../services/attendanceService";
+import {
+  buildCheckInPayload,
+  buildCheckOutPayload,
+  buildPunchPayload,
+  PUNCH_TYPES,
+} from "../services/attendancePayload";
+import {
+  getAttendanceErrorMessage,
+  submitCheckIn,
+  submitCheckOut,
+  submitPunch,
+} from "../services/attendanceService";
 import { scheduleForDate } from "../utils/attendanceCalculations";
 import { formatDateLabel, formatTimeLabel, parseApiDateTime } from "../utils/dateTime";
 import { ensureForegroundPermission, getFreshPosition, PERMISSION_MESSAGES } from "../services/locationService";
@@ -61,6 +71,7 @@ const TimeScreen = ({ navigation }) => {
   const mapRef = useRef(null);
   const busy = useRef(false);
   const lastSubmission = useRef(null);
+  const pendingPunch = useRef(null);
   const [successDetails, setSuccessDetails] = useState(null);
 
   const attendanceState = useMemo(
@@ -193,10 +204,21 @@ const TimeScreen = ({ navigation }) => {
         Alert.alert("Attendance unavailable", getAttendanceErrorMessage(latest.error));
         return;
       }
-      const captureAt = Date.now();
-      const current = deriveAttendanceState(latest.data ?? [], schedule, captureAt);
+      const punchType = isCheckIn ? PUNCH_TYPES.IN : PUNCH_TYPES.OUT;
+      const attemptAt = Date.now();
+      const firstPass = deriveAttendanceState(latest.data ?? [], schedule, attemptAt);
+      const pending = pendingPunch.current;
+      const reusePunch =
+        pending &&
+        pending.employeeId === Number(employeeId) &&
+        pending.punchType === punchType &&
+        pending.attendanceDateKey === firstPass.attendanceDateKey;
+      const captureAt = reusePunch ? pending.at : attemptAt;
+      const current = reusePunch ? deriveAttendanceState(latest.data ?? [], schedule, captureAt) : firstPass;
+      const dailyAlreadySaved = isCheckIn ? current.openRecord || current.completedRecord : !current.openRecord;
+      if (dailyAlreadySaved) pendingPunch.current = null;
 
-      let saved;
+      let dailyPayload;
       if (isCheckIn) {
         if (current.openRecord || current.completedRecord) {
           Alert.alert(
@@ -207,7 +229,7 @@ const TimeScreen = ({ navigation }) => {
           );
           return;
         }
-        const payload = buildCheckInPayload({
+        dailyPayload = buildCheckInPayload({
           employeeId,
           shiftId,
           dateKey: current.attendanceDateKey,
@@ -217,7 +239,6 @@ const TimeScreen = ({ navigation }) => {
           testMode: ATTENDANCE_TEST_MODE,
           defaults: ATTENDANCE_FIELD_DEFAULTS,
         });
-        saved = await submitCheckIn(payload);
       } else {
         if (!current.openRecord) {
           Alert.alert(
@@ -228,20 +249,42 @@ const TimeScreen = ({ navigation }) => {
           );
           return;
         }
-        const payload = buildCheckOutPayload({
+        dailyPayload = buildCheckOutPayload({
           record: current.openRecord,
           employeeId,
           actualOut: captureAt,
           reason,
           testMode: ATTENDANCE_TEST_MODE,
         });
-        saved = await submitCheckOut(payload);
       }
 
-      if (Number(saved?.employeE_ID) !== Number(employeeId)) {
-        throw new Error("The saved record does not belong to the signed-in employee.");
+      if (!reusePunch) {
+        const punch = await submitPunch(
+          buildPunchPayload({ employeeId, punchType, punchAt: captureAt, position: fresh })
+        );
+        if (Number(punch?.employeE_ID) !== Number(employeeId)) {
+          throw new Error("The saved punch does not belong to the signed-in employee.");
+        }
+        pendingPunch.current = {
+          employeeId: Number(employeeId),
+          punchType,
+          attendanceDateKey: current.attendanceDateKey,
+          at: captureAt,
+        };
       }
 
+      let saved;
+      try {
+        saved = isCheckIn ? await submitCheckIn(dailyPayload) : await submitCheckOut(dailyPayload);
+        if (Number(saved?.employeE_ID) !== Number(employeeId)) {
+          throw new Error("The saved record does not belong to the signed-in employee.");
+        }
+      } catch (error) {
+        error.punchSaved = true;
+        throw error;
+      }
+
+      pendingPunch.current = null;
       lastSubmission.current = { type: captureType, at: Date.now() };
       setModalVisible(false);
       setSuccessDetails({

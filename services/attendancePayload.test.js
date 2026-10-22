@@ -2,8 +2,12 @@ import assert from "assert";
 import {
   buildCheckInPayload,
   buildCheckOutPayload,
+  buildPunchPayload,
+  extractSavedPunch,
   extractSavedRecord,
   findMatchingCheckIn,
+  findMatchingPunch,
+  normalizePunch,
   isOpenRecord,
   normalizeRecord,
 } from "./attendancePayload.js";
@@ -131,3 +135,34 @@ assert.strictEqual(
 );
 
 console.log("attendance payload tests passed");
+
+const punchAt = parseApiDateTime("2026-10-21T09:02:00");
+const punch = buildPunchPayload({
+  employeeId: 487,
+  punchType: "IN",
+  punchAt,
+  position: { latitude: 31.5203701234, longitude: 74.3587491234 },
+});
+assert.deepStrictEqual(punch, {
+  puncH_ID: 0,
+  employeE_ID: 487,
+  puncH_DATETIME: "2026-10-21T09:02:00",
+  devicE_ID: "MOBILE-APP",
+  devicE_PUNCH_ID: null,
+  puncH_TYPE: "IN",
+  source: "MOBILE",
+  latitude: 31.52037,
+  longitude: 74.358749,
+  puncH_TAG: "MOBILE_APP",
+});
+assert.throws(() => buildPunchPayload({ employeeId: 487, punchType: "IN", punchAt, position: null }));
+assert.throws(() => buildPunchPayload({ employeeId: 487, punchType: "BREAK", punchAt, position: { latitude: 1, longitude: 1 } }));
+
+const serverPunch = { ...punch, PUNCH_ID: 1, IMPORT_BATCH_NO: null };
+assert.strictEqual(extractSavedPunch(serverPunch).puncH_ID, 1);
+assert.strictEqual(extractSavedPunch({ ...punch }), null);
+const punches = [normalizePunch({ ...punch, puncH_ID: 1, puncH_DATETIME: "2026-10-21T09:02:41" })];
+assert.ok(findMatchingPunch(punches, { employeeId: 487, punchType: "IN", punchAt }));
+assert.strictEqual(findMatchingPunch(punches, { employeeId: 487, punchType: "OUT", punchAt }), null);
+
+console.log("punch payload tests passed");

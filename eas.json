@@ -8,6 +8,12 @@
         "EXPO_PUBLIC_API_BASE_URL": "https://api.payroll.dwp.com.pk"
       }
     },
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development"
+    },
     "preview": {
       "extends": "base",
       "distribution": "internal",

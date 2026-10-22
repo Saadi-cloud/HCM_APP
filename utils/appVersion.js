@@ -23,7 +23,7 @@ export function getAppConfigVersion() {
 export function getProductionBundleId() {
   return (
     Constants.expoConfig?.ios?.bundleIdentifier ||
-    "com.msaadaslam.SecondarySale"
+    "com.dwp.hcm"
   );
 }
 
