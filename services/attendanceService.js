@@ -1,15 +1,18 @@
 import { api } from "../utils/Api";
-import { addDays, apiDateKey, parseApiDateTime } from "../utils/dateTime";
+import { addDays, apiDateKey, businessDateKey, parseApiDateTime } from "../utils/dateTime";
 import {
   asRecordList,
   extractSavedPunch,
-  extractSavedRecord,
-  findMatchingCheckIn,
-  findMatchingCheckOut,
+  findDailyAfterPunch,
   findMatchingPunch,
   normalizePunch,
   normalizeRecord,
 } from "./attendancePayload";
+
+const DAILY_CONFIRM_ATTEMPTS = 4;
+const DAILY_CONFIRM_DELAY_MS = 500;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function fetchPunchList(employeeId, fromDateKey, toDateKey) {
   const response = await api.get("/api/HrAttPunchRaw/GetHrAttPunchRawList", {
@@ -18,40 +21,6 @@ export async function fetchPunchList(employeeId, fromDateKey, toDateKey) {
   return asRecordList(response?.data)
     .map(normalizePunch)
     .filter((punch) => punch && Number(punch.employeE_ID) === Number(employeeId));
-}
-
-export async function submitPunch(payload) {
-  let saved = null;
-  let requestError = null;
-  try {
-    const response = await api.post("/api/HrAttPunchRaw/SaveHrAttPunchRaw", payload);
-    saved = extractSavedPunch(response?.data);
-  } catch (error) {
-    requestError = error;
-  }
-
-  const punchAt = parseApiDateTime(payload.puncH_DATETIME);
-  const dateKey = apiDateKey(payload.puncH_DATETIME);
-  let confirmed = null;
-  try {
-    const punches = await fetchPunchList(payload.employeE_ID, addDays(dateKey, -1), addDays(dateKey, 1));
-    confirmed =
-      (saved && punches.find((punch) => Number(punch.puncH_ID) === Number(saved.puncH_ID))) ||
-      findMatchingPunch(punches, {
-        employeeId: payload.employeE_ID,
-        punchType: payload.puncH_TYPE,
-        punchAt,
-      });
-  } catch (error) {
-    if (requestError) throw requestError;
-    if (saved && Number(saved.employeE_ID) === Number(payload.employeE_ID)) return saved;
-    throw error;
-  }
-
-  if (confirmed) return confirmed;
-  if (requestError) throw requestError;
-  if (saved && Number(saved.employeE_ID) === Number(payload.employeE_ID)) return saved;
-  throw new Error("The server did not confirm the punch. Your attendance was not recorded.");
 }
 
 export async function fetchAttendanceList(employeeId, fromDateKey, toDateKey) {
@@ -67,66 +36,83 @@ async function fetchAround(employeeId, dateKey) {
   return fetchAttendanceList(employeeId, addDays(dateKey, -1), addDays(dateKey, 1));
 }
 
-// A timed-out save may still have been committed, so the server list is the source of truth.
-export async function submitCheckIn(payload) {
-  let saved = null;
-  let requestError = null;
-  try {
-    const response = await api.post("/api/HrAttDaily/SaveHrAttDaily", payload);
-    saved = extractSavedRecord(response?.data);
-  } catch (error) {
-    requestError = error;
-  }
-
-  const dateKey = payload.attendancE_DATE.slice(0, 10);
-  let confirmed = null;
-  try {
-    const records = await fetchAround(payload.employeE_ID, dateKey);
-    confirmed =
-      (saved && records.find((record) => Number(record.attendancE_ID) === Number(saved.attendancE_ID))) ||
-      findMatchingCheckIn(records, {
-        employeeId: payload.employeE_ID,
-        dateKey,
-        actualIn: parseApiDateTime(payload.actuaL_IN),
-      });
-  } catch (error) {
-    if (requestError) throw requestError;
-    if (saved && Number(saved.employeE_ID) === Number(payload.employeE_ID)) return saved;
-    throw error;
-  }
-
-  if (confirmed) return confirmed;
-  if (requestError) throw requestError;
-  if (saved && Number(saved.employeE_ID) === Number(payload.employeE_ID)) return saved;
-  throw new Error("The server did not confirm the check-in. Check your attendance history before trying again.");
+async function confirmPunch(payload, saved) {
+  const punchAt = parseApiDateTime(payload.puncH_DATETIME);
+  const dateKey = apiDateKey(payload.puncH_DATETIME);
+  const punches = await fetchPunchList(payload.employeE_ID, addDays(dateKey, -1), addDays(dateKey, 1));
+  return (
+    (saved && punches.find((punch) => Number(punch.puncH_ID) === Number(saved.puncH_ID))) ||
+    findMatchingPunch(punches, {
+      employeeId: payload.employeE_ID,
+      punchType: payload.puncH_TYPE,
+      punchAt,
+    }) ||
+    null
+  );
 }
 
-export async function submitCheckOut(payload) {
-  let requestError = null;
+async function waitForDailyRecord(employeeId, punchType, punchAt) {
+  const dateKey = businessDateKey(punchAt);
+  let lastError = null;
+
+  for (let attempt = 0; attempt < DAILY_CONFIRM_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await wait(DAILY_CONFIRM_DELAY_MS);
+    try {
+      const records = await fetchAround(employeeId, dateKey);
+      const daily = findDailyAfterPunch(records, { employeeId, punchType, punchAt });
+      if (daily) return daily;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError) throw lastError;
+  return null;
+}
+
+// Attendance day is created/updated by TRG_HR_ATT_PUNCH_RAW_PROCESS after this insert.
+export async function submitPunch(payload) {
   let saved = null;
+  let requestError = null;
   try {
-    const response = await api.put("/api/HrAttDaily/UpdateHrAttDaily", payload);
-    saved = extractSavedRecord(response?.data);
+    const response = await api.post("/api/HrAttPunchRaw/SaveHrAttPunchRaw", payload);
+    saved = extractSavedPunch(response?.data);
   } catch (error) {
     requestError = error;
   }
 
-  const actualOut = parseApiDateTime(payload.actuaL_OUT);
   let confirmed = null;
   try {
-    const records = await fetchAround(payload.employeE_ID, payload.attendancE_DATE.slice(0, 10));
-    confirmed = findMatchingCheckOut(records, { attendanceId: payload.attendancE_ID, actualOut });
+    confirmed = await confirmPunch(payload, saved);
   } catch (error) {
     if (requestError) throw requestError;
+    if (saved && Number(saved.employeE_ID) === Number(payload.employeE_ID)) {
+      confirmed = saved;
+    } else {
+      throw error;
+    }
+  }
+
+  if (!confirmed) {
+    if (requestError) throw requestError;
+    if (saved && Number(saved.employeE_ID) === Number(payload.employeE_ID)) {
+      confirmed = saved;
+    } else {
+      throw new Error("The server did not confirm the punch. Your attendance was not recorded.");
+    }
+  }
+
+  const punchAt = parseApiDateTime(payload.puncH_DATETIME);
+  const daily = await waitForDailyRecord(payload.employeE_ID, payload.puncH_TYPE, punchAt);
+  if (!daily) {
+    const error = new Error(
+      "Your punch was saved, but the attendance day was not processed yet. Check history in a moment before trying again."
+    );
+    error.punchSaved = true;
     throw error;
   }
 
-  if (confirmed) return confirmed;
-  if (requestError) throw requestError;
-  if (saved && Number(saved.attendancE_ID) !== Number(payload.attendancE_ID)) {
-    throw new Error("The server returned a different attendance record. Contact HR before trying again.");
-  }
-  throw new Error("The server did not confirm the check-out. Check your attendance history before trying again.");
+  return { punch: confirmed, daily };
 }
 
 export function getAttendanceErrorMessage(error) {
@@ -134,7 +120,10 @@ export function getAttendanceErrorMessage(error) {
     return "The request timed out. Your attendance may not be saved — check your attendance history.";
   }
   if (error?.punchSaved) {
-    return "Your punch was logged, but the attendance record could not be saved. Try again — the same punch time will be reused.";
+    return (
+      error.message ||
+      "Your punch was logged, but the attendance day was not processed. Check history before trying again."
+    );
   }
   if (!error?.response) {
     return error?.message || "Unable to reach the payroll server. Check your connection.";

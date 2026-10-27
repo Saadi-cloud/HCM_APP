@@ -158,7 +158,7 @@ export function findMatchingCheckIn(records, { employeeId, dateKey, actualIn }) 
     records.find(
       (record) =>
         Number(record.employeE_ID) === Number(employeeId) &&
-        recordDateKey(record) === dateKey &&
+        (dateKey == null || recordDateKey(record) === dateKey) &&
         sameMinute(parseApiDateTime(record.actuaL_IN), actualIn)
     ) ?? null
   );
@@ -238,12 +238,20 @@ export function findMatchingPunch(punches, { employeeId, punchType, punchAt }) {
   );
 }
 
-export function findMatchingCheckOut(records, { attendanceId, actualOut }) {
+export function findMatchingCheckOut(records, { attendanceId, actualOut, employeeId }) {
   return (
-    records.find(
-      (record) =>
-        Number(record.attendancE_ID) === Number(attendanceId) &&
-        sameMinute(parseApiDateTime(record.actuaL_OUT), actualOut)
-    ) ?? null
+    records.find((record) => {
+      if (!sameMinute(parseApiDateTime(record.actuaL_OUT), actualOut)) return false;
+      if (attendanceId != null && Number(record.attendancE_ID) === Number(attendanceId)) return true;
+      if (employeeId != null && Number(record.employeE_ID) === Number(employeeId)) return true;
+      return false;
+    }) ?? null
   );
+}
+
+export function findDailyAfterPunch(records, { employeeId, punchType, punchAt }) {
+  if (punchType === PUNCH_TYPES.IN) {
+    return findMatchingCheckIn(records, { employeeId, dateKey: null, actualIn: punchAt });
+  }
+  return findMatchingCheckOut(records, { employeeId, actualOut: punchAt });
 }
