@@ -23,7 +23,12 @@ import AttendanceSuccessModal from "../components/AttendanceSuccessModal";
 import { buildPunchPayload, PUNCH_TYPES, recordDateKey } from "../services/attendancePayload";
 import { getAttendanceErrorMessage, submitPunch } from "../services/attendanceService";
 import { formatDateLabel, formatTimeLabel, parseApiDateTime } from "../utils/dateTime";
-import { ensureForegroundPermission, getFreshPosition, PERMISSION_MESSAGES } from "../services/locationService";
+import {
+  ensureForegroundPermission,
+  getFreshPosition,
+  PERMISSION_MESSAGES,
+  watchPosition,
+} from "../services/locationService";
 import {
   addTestOfficeAtPosition,
   clearTestOffices,
@@ -58,8 +63,10 @@ const TimeScreen = ({ navigation }) => {
   const now = useClock();
   const mapRef = useRef(null);
   const busy = useRef(false);
+  const followMap = useRef(true);
   const lastSubmission = useRef(null);
   const [successDetails, setSuccessDetails] = useState(null);
+  const [tracksYouMarker, setTracksYouMarker] = useState(true);
 
   const attendanceState = useMemo(
     () => deriveAttendanceState(attendanceQuery.records, schedule, now.getTime()),
@@ -82,6 +89,19 @@ const TimeScreen = ({ navigation }) => {
     setOffices(await getAuthorizedOffices(employeeId));
   }, [employeeId]);
 
+  const centerOn = useCallback((coords) => {
+    if (!coords) return;
+    mapRef.current?.animateToRegion(
+      {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        latitudeDelta: MAP_DELTA,
+        longitudeDelta: MAP_DELTA,
+      },
+      400
+    );
+  }, []);
+
   const refreshLocation = useCallback(async () => {
     if (busy.current) return null;
     busy.current = true;
@@ -98,15 +118,8 @@ const TimeScreen = ({ navigation }) => {
       setPermissionBlocked(false);
       const fresh = await getFreshPosition();
       setPosition(fresh);
-      mapRef.current?.animateToRegion(
-        {
-          latitude: fresh.latitude,
-          longitude: fresh.longitude,
-          latitudeDelta: MAP_DELTA,
-          longitudeDelta: MAP_DELTA,
-        },
-        400
-      );
+      followMap.current = true;
+      centerOn(fresh);
       return fresh;
     } catch {
       setLocationError("Unable to get your location. Check GPS and try again.");
@@ -115,12 +128,65 @@ const TimeScreen = ({ navigation }) => {
       busy.current = false;
       setLocating(false);
     }
-  }, []);
+  }, [centerOn]);
 
   useEffect(() => {
     loadOffices();
-    refreshLocation();
-  }, [loadOffices, refreshLocation]);
+  }, [loadOffices]);
+
+  useEffect(() => {
+    let active = true;
+    let subscription = null;
+
+    (async () => {
+      setLocating(true);
+      setLocationError("");
+      const permission = await ensureForegroundPermission();
+      if (!active) return;
+      if (!permission.granted) {
+        setPermissionBlocked(permission.reason === "blocked");
+        setLocationError(PERMISSION_MESSAGES[permission.reason]);
+        setPosition(null);
+        setLocating(false);
+        return;
+      }
+      setPermissionBlocked(false);
+
+      try {
+        const fresh = await getFreshPosition();
+        if (!active) return;
+        setPosition(fresh);
+        centerOn(fresh);
+        setLocating(false);
+      } catch {
+        if (!active) return;
+        setLocationError("Unable to get your location. Check GPS and try again.");
+        setLocating(false);
+      }
+
+      try {
+        subscription = await watchPosition((next) => {
+          if (!active) return;
+          setPosition(next);
+          setLocationError("");
+          if (followMap.current) centerOn(next);
+        });
+      } catch {
+        // One-shot GPS still works; live tracking is best-effort.
+      }
+    })();
+
+    return () => {
+      active = false;
+      subscription?.remove();
+    };
+  }, [centerOn]);
+
+  useEffect(() => {
+    setTracksYouMarker(true);
+    const timer = setTimeout(() => setTracksYouMarker(false), 750);
+    return () => clearTimeout(timer);
+  }, [geofence.status, position?.heading]);
 
   const canCapture = !locating && !locationError && geofence.allowed && reading.ok;
 
@@ -334,9 +400,12 @@ const TimeScreen = ({ navigation }) => {
               latitudeDelta: MAP_DELTA,
               longitudeDelta: MAP_DELTA,
             }}
-            showsUserLocation
+            showsUserLocation={false}
             showsMyLocationButton={false}
             toolbarEnabled={false}
+            onPanDrag={() => {
+              followMap.current = false;
+            }}
           >
             {mapOffices.map((office) => (
               <Circle
@@ -357,6 +426,23 @@ const TimeScreen = ({ navigation }) => {
                 pinColor={office.testOnly ? theme.orange : theme.navy}
               />
             ))}
+            <Marker
+              coordinate={{ latitude: position.latitude, longitude: position.longitude }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              flat
+              rotation={position.heading ?? 0}
+              title="You"
+              description={
+                geofence.status === "inside"
+                  ? `Inside ${geofence.nearest?.office?.locationName ?? "office"}`
+                  : "Outside office radius"
+              }
+              tracksViewChanges={tracksYouMarker}
+            >
+              <View style={[styles.youMarker, geofence.status === "inside" && styles.youMarkerInside]}>
+                <Ionicons name="car" size={20} color={theme.white} />
+              </View>
+            </Marker>
           </MapView>
         ) : (
           <View style={styles.mapPlaceholder}>
@@ -559,6 +645,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
+  },
+  youMarker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.orange,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: theme.white,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  youMarkerInside: {
+    backgroundColor: "#15803D",
   },
   panel: {
     flexGrow: 0,

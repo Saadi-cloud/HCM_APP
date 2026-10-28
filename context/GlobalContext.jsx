@@ -103,6 +103,8 @@ export const GlobalProvider = ({ children }) => {
 
   const userId = authData?.userId ?? null;
   const employeeId = authData?.employeeId ?? null;
+  const companyId = authData?.companyId ?? null;
+  const financialYearId = authData?.financialYearId ?? null;
   const empId = employeeId;
   const userName = authData?.username ?? authData?.userName ?? null;
   const branchId = authData?.branchId ?? null;
@@ -277,6 +279,8 @@ export const GlobalProvider = ({ children }) => {
       userId,
       employeeId,
       empId,
+      companyId,
+      financialYearId,
       userName,
       branchId,
       groupId,
@@ -304,6 +308,8 @@ export const GlobalProvider = ({ children }) => {
       userId,
       employeeId,
       empId,
+      companyId,
+      financialYearId,
       userName,
       branchId,
       groupId,

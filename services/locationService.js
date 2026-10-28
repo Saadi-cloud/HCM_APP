@@ -1,5 +1,17 @@
 import * as Location from "expo-location";
 
+export function readingFromLocation(location) {
+  const heading = Number(location?.coords?.heading);
+  return {
+    latitude: location.coords.latitude,
+    longitude: location.coords.longitude,
+    accuracy: location.coords.accuracy,
+    timestamp: location.timestamp,
+    mocked: location.mocked === true,
+    heading: Number.isFinite(heading) && heading >= 0 ? heading : null,
+  };
+}
+
 export async function ensureForegroundPermission() {
   const servicesEnabled = await Location.hasServicesEnabledAsync();
   if (!servicesEnabled) {
@@ -24,14 +36,20 @@ export async function getFreshPosition() {
     accuracy: Location.Accuracy.High,
     mayShowUserSettingsDialog: true,
   });
+  return readingFromLocation(location);
+}
 
-  return {
-    latitude: location.coords.latitude,
-    longitude: location.coords.longitude,
-    accuracy: location.coords.accuracy,
-    timestamp: location.timestamp,
-    mocked: location.mocked === true,
-  };
+// Foreground-only live updates for the Time map marker. Not used for punch submission.
+export async function watchPosition(onUpdate) {
+  return Location.watchPositionAsync(
+    {
+      accuracy: Location.Accuracy.High,
+      timeInterval: 2000,
+      distanceInterval: 5,
+      mayShowUserSettingsDialog: true,
+    },
+    (location) => onUpdate(readingFromLocation(location))
+  );
 }
 
 export const PERMISSION_MESSAGES = {

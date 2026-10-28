@@ -10,6 +10,8 @@ import SettingsScreen from "../screens/SettingsScreen";
 import TimeScreen from "../screens/TimeScreen";
 import AttendanceHistoryScreen from "../screens/AttendanceHistoryScreen";
 import AttendanceDetailsScreen from "../screens/AttendanceDetailsScreen";
+import LeaveHomeScreen from "../screens/LeaveRequest/LeaveHomeScreen";
+import ApplyLeaveScreen from "../screens/LeaveRequest/ApplyLeaveScreen";
 import ModulePlaceholderScreen from "../screens/ModulePlaceholderScreen";
 import { useGlobalState } from "../context/GlobalContext";
 
@@ -46,6 +48,8 @@ const StackNavigator = () => {
             <RootStack.Screen name="Time" component={TimeScreen} />
             <RootStack.Screen name="AttendanceHistory" component={AttendanceHistoryScreen} />
             <RootStack.Screen name="AttendanceDetails" component={AttendanceDetailsScreen} />
+            <RootStack.Screen name="LeaveHome" component={LeaveHomeScreen} />
+            <RootStack.Screen name="ApplyLeave" component={ApplyLeaveScreen} />
             <RootStack.Screen name="ModulePlaceholder" component={ModulePlaceholderScreen} />
           </RootStack.Group>
         )}

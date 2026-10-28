@@ -24,7 +24,7 @@ const COLUMNS = 3;
 const MODULES = [
   { key: "todo", title: "Things to do", icon: "checkbox-outline" },
   { key: "requests", title: "Request Status", icon: "document-text-outline" },
-  { key: "leave", title: "Leave", icon: "airplane-outline" },
+  { key: "leave", title: "Leave", icon: "airplane-outline", route: "LeaveHome" },
   { key: "hr", title: "Reach HR", icon: "chatbubbles-outline" },
   { key: "time", title: "Time", icon: "time-outline", route: "Time" },
   { key: "notice", title: "Notice Board", icon: "megaphone-outline" },
