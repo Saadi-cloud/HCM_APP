@@ -3,7 +3,7 @@ import {
   asList,
   extractSavedLeaveRequest,
   isActiveFlag,
-  normalizeLeaveQuota,
+  normalizeEmployeeLeaveBalance,
   normalizeLeaveReason,
   normalizeLeaveRequest,
   normalizeLeaveType,
@@ -32,11 +32,11 @@ export async function fetchEmployees(companyId) {
   return asList(response?.data).filter((item) => Number(item?.employeeId ?? item?.employeE_ID) > 0);
 }
 
-export async function fetchLeaveQuotas() {
-  const response = await api.get("/api/HrLeaveQuota/GetHrLeaveQuotaList");
-  return asList(response?.data)
-    .map(normalizeLeaveQuota)
-    .filter((item) => item && isActiveFlag(item.activE_FLAG));
+export async function fetchEmployeeLeaveBalance(employeeId, leaveYear) {
+  const response = await api.get(`/api/HrLeaveLedger/GetEmployeeLeaveBalance/${employeeId}`, {
+    params: Number(leaveYear) > 0 ? { leaveYear: Number(leaveYear) } : undefined,
+  });
+  return asList(response?.data).map(normalizeEmployeeLeaveBalance).filter(Boolean);
 }
 
 export async function fetchLeaveHistory(employeeId, typeId) {

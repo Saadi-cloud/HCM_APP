@@ -30,6 +30,36 @@ export function normalizeLeaveType(raw) {
   };
 }
 
+export function normalizeEmployeeLeaveBalance(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const map = {};
+  Object.keys(raw).forEach((key) => {
+    map[lowerKey(key)] = raw[key];
+  });
+  const leaveTypeId = Number(map.leavetypeid);
+  if (!(leaveTypeId > 0)) return null;
+  return {
+    leaveTypeId,
+    leaveTypeCode: map.leavetypecode ?? null,
+    leaveTypeName: map.leavetypename ?? null,
+    paidFlag: map.paidflag ?? null,
+    halfDayAllowed: map.halfdayallowed ?? null,
+    allowNegative: map.allownegative ?? null,
+    leaveYear: map.leaveyear == null ? null : Number(map.leaveyear),
+    source: map.source ?? null,
+    allocatedDays: map.allocateddays == null ? null : Number(map.allocateddays),
+    usedDays: map.useddays == null ? null : Number(map.useddays),
+    pendingDays: map.pendingdays == null ? null : Number(map.pendingdays),
+    balanceDays: map.balancedays == null ? null : Number(map.balancedays),
+  };
+}
+
+export function selectEmployeeLeaveBalance(rows, leaveTypeId) {
+  return (
+    (rows ?? []).find((item) => Number(item.leaveTypeId) === Number(leaveTypeId)) ?? null
+  );
+}
+
 export function normalizeLeaveQuota(raw) {
   if (!raw || typeof raw !== "object") return null;
   const map = {};

@@ -16,19 +16,19 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import DropDownPicker from "react-native-dropdown-picker";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useGlobalState } from "../../context/GlobalContext";
 import {
   buildLeaveDetailPayloads,
   buildLeaveMasterPayload,
   employeeLabel,
   planLeaveRequest,
-  selectLeaveQuota,
+  selectEmployeeLeaveBalance,
 } from "../../services/leavePayload";
 import {
+  fetchEmployeeLeaveBalance,
   fetchEmployees,
   fetchLeaveHistory,
-  fetchLeaveQuotas,
   fetchLeaveReasons,
   fetchLeaveRequests,
   fetchLeaveTypes,
@@ -45,17 +45,16 @@ import { businessDateKey, dateKeyFromPicker, parseApiDateTime, pickerDateFromKey
 import { theme } from "../../constants/theme";
 
 const ApplyLeaveScreen = ({ navigation }) => {
-  const { employeeId, userId, companyId, accessToken, authData } = useGlobalState();
+  const { employeeId, userId, companyId, accessToken } = useGlobalState();
+  const queryClient = useQueryClient();
   const todayKey = businessDateKey();
-  const leaveYear = Number(
-    String(authData?.endingDate ?? "").slice(0, 4) || fromKeyYearFallback(todayKey)
-  );
 
   const [leaveTypeId, setLeaveTypeId] = useState(null);
   const [reasonId, setReasonId] = useState(null);
   const [coveringEmployeeId, setCoveringEmployeeId] = useState(null);
   const [fromKey, setFromKey] = useState(todayKey);
   const [toKey, setToKey] = useState(todayKey);
+  const leaveYear = Number(String(fromKey).slice(0, 4)) || Number(String(todayKey).slice(0, 4));
   const [dayType, setDayType] = useState(DAY_TYPES.FULL);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -80,10 +79,10 @@ const ApplyLeaveScreen = ({ navigation }) => {
     queryFn: () => fetchEmployees(companyId),
     enabled: !!accessToken && Number(companyId) > 0,
   });
-  const quotasQuery = useQuery({
-    queryKey: ["leaveQuotas"],
-    queryFn: fetchLeaveQuotas,
-    enabled: !!accessToken,
+  const balanceQuery = useQuery({
+    queryKey: ["employeeLeaveBalance", employeeId, leaveYear],
+    queryFn: () => fetchEmployeeLeaveBalance(employeeId, leaveYear),
+    enabled: !!accessToken && Number(employeeId) > 0 && Number(leaveYear) > 0,
   });
   const requestsQuery = useQuery({
     queryKey: ["leaveRequests"],
@@ -99,11 +98,13 @@ const ApplyLeaveScreen = ({ navigation }) => {
   const leaveTypes = typesQuery.data ?? [];
   const selectedType = leaveTypes.find((item) => item.leavE_TYPE_ID === leaveTypeId) ?? null;
   const halfDayAllowed = String(selectedType?.halF_DAY_ALLOWED ?? "Y").toUpperCase() !== "N";
-  const quota = useMemo(
-    () => selectLeaveQuota(quotasQuery.data, leaveTypeId, leaveYear),
-    [quotasQuery.data, leaveTypeId, leaveYear]
+  const typeBalance = useMemo(
+    () => selectEmployeeLeaveBalance(balanceQuery.data, leaveTypeId),
+    [balanceQuery.data, leaveTypeId]
   );
-  const allocatedDays = quota?.allocateD_DAYS ?? null;
+  const allocatedDays = typeBalance?.allocatedDays ?? null;
+  const balanceDays = typeBalance?.balanceDays ?? null;
+  const pendingDays = typeBalance?.pendingDays ?? 0;
 
   const myTypeRequests = useMemo(
     () =>
@@ -115,28 +116,6 @@ const ApplyLeaveScreen = ({ navigation }) => {
       ),
     [requestsQuery.data, employeeId, leaveTypeId, leaveYear]
   );
-
-  const pendingDays = useMemo(
-    () =>
-      myTypeRequests
-        .filter((item) => String(item.status ?? "").toUpperCase().includes("PEND"))
-        .reduce((sum, item) => sum + Number(item.totaL_DAYS || 0), 0),
-    [myTypeRequests]
-  );
-
-  const usedDays = useMemo(
-    () =>
-      myTypeRequests
-        .filter((item) => {
-          const status = String(item.status ?? "").toUpperCase();
-          return status.includes("APPROV") || status === "FINAL" || status.includes("ACCEPT");
-        })
-        .reduce((sum, item) => sum + Number(item.totaL_DAYS || 0), 0),
-    [myTypeRequests]
-  );
-
-  const balanceDays =
-    allocatedDays == null ? null : Math.max(0, Number(allocatedDays) - Number(usedDays) - Number(pendingDays));
 
   useEffect(() => {
     if (!leaveTypeId && leaveTypes.length) {
@@ -204,7 +183,7 @@ const ApplyLeaveScreen = ({ navigation }) => {
     return `${value ?? 0}/${allocatedDays}`;
   };
 
-  const statsLoading = quotasQuery.isLoading || requestsQuery.isLoading;
+  const statsLoading = balanceQuery.isLoading;
 
   const applyDate = (field, key) => {
     if (field === "from") {
@@ -295,6 +274,8 @@ const ApplyLeaveScreen = ({ navigation }) => {
       });
       const details = buildLeaveDetailPayloads(0, plan.rows);
       const saved = await submitLeaveRequest({ master, details });
+      await queryClient.invalidateQueries({ queryKey: ["employeeLeaveBalance", employeeId] });
+      await queryClient.invalidateQueries({ queryKey: ["leaveRequests"] });
       Alert.alert(
         "Leave submitted",
         `Request ${saved.master.requesT_NO || saved.master.leavE_REQUEST_ID} is pending approval.`,
@@ -493,10 +474,6 @@ const ApplyLeaveScreen = ({ navigation }) => {
     </SafeAreaView>
   );
 };
-
-function fromKeyYearFallback(dateKey) {
-  return String(dateKey ?? "").slice(0, 4) || new Date().getFullYear();
-}
 
 function Stat({ label, value }) {
   return (
