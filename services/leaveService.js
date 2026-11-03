@@ -4,6 +4,8 @@ import {
   extractSavedLeaveRequest,
   isActiveFlag,
   normalizeEmployeeLeaveBalance,
+  normalizeLeaveHistoryItem,
+  normalizeLeaveHistoryPage,
   normalizeLeaveReason,
   normalizeLeaveRequest,
   normalizeLeaveType,
@@ -46,6 +48,33 @@ export async function fetchLeaveHistory(employeeId, typeId) {
   return asList(response?.data);
 }
 
+export async function fetchEmployeeLeaveHistory(employeeId, { leaveYear, status } = {}) {
+  const response = await api.get(`/api/HrLeaveRequestMst/GetEmployeeLeaveHistory/${employeeId}`, {
+    params: {
+      ...(Number(leaveYear) > 0 ? { leaveYear: Number(leaveYear) } : {}),
+      ...(status ? { status } : {}),
+    },
+  });
+  return asList(response?.data).map(normalizeLeaveHistoryItem).filter(Boolean);
+}
+
+export async function fetchLeaveHistoryForViewer(
+  userId,
+  { employeeId, departmentId, leaveYear, status, pageNumber = 1, pageSize = 50 } = {}
+) {
+  const response = await api.get(`/api/HrLeaveRequestMst/GetLeaveHistoryForViewer/${userId}`, {
+    params: {
+      ...(Number(employeeId) > 0 ? { employeeId: Number(employeeId) } : {}),
+      ...(Number(departmentId) > 0 ? { departmentId: Number(departmentId) } : {}),
+      ...(Number(leaveYear) > 0 ? { leaveYear: Number(leaveYear) } : {}),
+      ...(status ? { status } : {}),
+      pageNumber,
+      pageSize,
+    },
+  });
+  return normalizeLeaveHistoryPage(response?.data);
+}
+
 export async function fetchLeaveRequests() {
   const response = await api.get("/api/HrLeaveRequestMst/GetHrLeaveRequestMstList");
   return asList(response?.data)
@@ -83,5 +112,9 @@ export function getLeaveErrorMessage(error) {
   const message = typeof data === "string" ? data : data?.message || data?.title;
   if (typeof message === "string" && message.trim() && message.length < 200) return message.trim();
   if (error.response.status === 401) return "Your session has expired. Please sign in again.";
+  if (error.response.status === 403) {
+    if (typeof message === "string" && message.trim()) return message.trim();
+    return "You do not have permission to view this leave history.";
+  }
   return "The payroll server could not save the leave request. Please try again later.";
 }

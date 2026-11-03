@@ -1,11 +1,13 @@
-import { StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useGlobalState } from "../../context/GlobalContext";
+import { profileHasScreen } from "../../services/mobileProfileService";
 import { theme } from "../../constants/theme";
 
-const CARDS = [
+const SCREEN_CARDS = [
   {
-    key: "apply",
+    key: "APPLY_LEAVE",
     eyebrow: "Apply",
     title: "Leave",
     icon: "exit-outline",
@@ -13,48 +15,65 @@ const CARDS = [
     route: "ApplyLeave",
   },
   {
-    key: "cancel",
-    eyebrow: "Cancel",
+    key: "MY_LEAVE",
+    eyebrow: "My",
     title: "Leave",
-    icon: "close-circle",
-    color: theme.yellow,
-    route: "CancelLeave",
-    note: "Cancel / withdraw leave will be connected next.",
-  },
-  {
-    key: "calendar",
-    eyebrow: "Leave",
-    title: "Calendar",
-    icon: "calendar-outline",
+    icon: "document-text-outline",
     color: theme.orange,
-    route: "LeaveCalendar",
-    note: "Leave calendar will be connected next.",
+    route: "LeaveHistory",
   },
   {
-    key: "summary",
-    eyebrow: "Leave",
-    title: "Summary",
+    key: "MY_BALANCE",
+    eyebrow: "My",
+    title: "Balance",
     icon: "stats-chart-outline",
     color: "#15803D",
-    route: "LeaveSummary",
-    note: "Leave summary will be connected next.",
+    route: "LeaveBalance",
+  },
+  {
+    key: "TEAM_LEAVE",
+    eyebrow: "Team",
+    title: "Leave",
+    icon: "people-outline",
+    color: theme.navy,
+    route: "TeamLeaveHistory",
+  },
+  {
+    key: "ALL_LEAVE",
+    eyebrow: "All",
+    title: "Leave",
+    icon: "business-outline",
+    color: theme.navy,
+    route: "TeamLeaveHistory",
+  },
+  {
+    key: "LEAVE_APPROVALS",
+    eyebrow: "Leave",
+    title: "Approvals",
+    icon: "checkmark-done-outline",
+    color: theme.yellow,
+    route: "ModulePlaceholder",
+    note: "Leave approvals will be connected when the approval APIs are shared.",
   },
 ];
 
 const LeaveHomeScreen = ({ navigation }) => {
   const { width } = useWindowDimensions();
+  const { mobileProfile, mobileProfileReady } = useGlobalState();
   const cardWidth = Math.floor((width - 16 * 2 - 14) / 2);
 
+  const cards = SCREEN_CARDS.filter((card) => profileHasScreen(mobileProfile, card.key));
+
   const openCard = (card) => {
-    if (card.route === "ApplyLeave") {
-      navigation.navigate("ApplyLeave");
+    if (card.route === "ModulePlaceholder") {
+      navigation.navigate("ModulePlaceholder", {
+        title: `${card.eyebrow} ${card.title}`.trim(),
+        icon: card.icon,
+        note: card.note,
+      });
       return;
     }
-    navigation.navigate("ModulePlaceholder", {
-      title: `${card.eyebrow} ${card.title}`.trim(),
-      icon: card.icon,
-      note: card.note,
-    });
+    navigation.navigate(card.route);
   };
 
   return (
@@ -67,20 +86,34 @@ const LeaveHomeScreen = ({ navigation }) => {
         <View style={styles.headerSpacer} />
       </View>
 
-      <View style={styles.grid}>
-        {CARDS.map((card) => (
-          <TouchableOpacity
-            key={card.key}
-            style={[styles.card, { width: cardWidth }]}
-            onPress={() => openCard(card)}
-            activeOpacity={0.85}
-          >
-            <Ionicons name={card.icon} size={42} color={card.color} />
-            <Text style={styles.eyebrow}>{card.eyebrow}</Text>
-            <Text style={styles.cardTitle}>{card.title}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {!mobileProfileReady ? (
+        <ActivityIndicator color={theme.navy} style={styles.loader} />
+      ) : (
+        <>
+          {mobileProfile?.role || mobileProfile?.leaveHistoryScope ? (
+            <Text style={styles.roleLine}>
+              {mobileProfile.role}
+              {mobileProfile.leaveHistoryScope ? ` · ${mobileProfile.leaveHistoryScope}` : ""}
+            </Text>
+          ) : null}
+          <View style={styles.grid}>
+            {(cards.length ? cards : SCREEN_CARDS.filter((card) => card.key === "APPLY_LEAVE" || card.key === "MY_LEAVE")).map(
+              (card) => (
+                <TouchableOpacity
+                  key={card.key}
+                  style={[styles.card, { width: cardWidth }]}
+                  onPress={() => openCard(card)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name={card.icon} size={42} color={card.color} />
+                  <Text style={styles.eyebrow}>{card.eyebrow}</Text>
+                  <Text style={styles.cardTitle}>{card.title}</Text>
+                </TouchableOpacity>
+              )
+            )}
+          </View>
+        </>
+      )}
     </SafeAreaView>
   );
 };
@@ -110,6 +143,16 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 26,
+  },
+  roleLine: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    color: theme.muted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  loader: {
+    marginTop: 40,
   },
   grid: {
     flexDirection: "row",

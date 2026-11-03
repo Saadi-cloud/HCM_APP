@@ -275,6 +275,8 @@ const ApplyLeaveScreen = ({ navigation }) => {
       const details = buildLeaveDetailPayloads(0, plan.rows);
       const saved = await submitLeaveRequest({ master, details });
       await queryClient.invalidateQueries({ queryKey: ["employeeLeaveBalance", employeeId] });
+      await queryClient.invalidateQueries({ queryKey: ["employeeLeaveHistory", employeeId] });
+      await queryClient.invalidateQueries({ queryKey: ["leaveHistoryForViewer"] });
       await queryClient.invalidateQueries({ queryKey: ["leaveRequests"] });
       Alert.alert(
         "Leave submitted",

@@ -50,6 +50,8 @@ const sanitized = sanitizeAuthResponse(
     companyName: company.companyName,
     server: null,
     employeeId: 180,
+    departmentId: 12,
+    attLeaveRole: "MANAGER",
   },
   1_000
 );
@@ -57,6 +59,8 @@ const sanitized = sanitizeAuthResponse(
 assert.strictEqual(sanitized.ok, true);
 assert.strictEqual(sanitized.token, token);
 assert.strictEqual(sanitized.session.employeeId, 180);
+assert.strictEqual(sanitized.session.departmentId, 12);
+assert.strictEqual(sanitized.session.attLeaveRole, "MANAGER");
 assert.strictEqual(sanitized.session.expiresAt, 1_800_000_000 * 1000);
 assert.strictEqual(Object.hasOwn(sanitized.session, "password"), false);
 assert.strictEqual(Object.hasOwn(sanitized.session, "token"), false);

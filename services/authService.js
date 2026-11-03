@@ -62,15 +62,19 @@ export function sanitizeAuthResponse(data, now = Date.now()) {
     };
   }
 
+  const departmentId = Number(data.departmentId);
   const session = stripSensitiveAuthFields({
     userId,
     username: data.username ?? null,
     employeeId,
+    departmentId: Number.isFinite(departmentId) && departmentId > 0 ? departmentId : null,
     companyId: Number(data.companyId),
     companyName: data.companyName ?? null,
     financialYearId: Number(data.financialYearId),
     startingDate: data.startingDate ?? null,
     endingDate: data.endingDate ?? null,
+    // Never persist password even if the Auth reply still includes it.
+    attLeaveRole: data.attLeaveRole ?? data.role ?? null,
     expiryMinutes: data.expiryMinutes ?? null,
     server: data.server ?? null,
     expiresAt,

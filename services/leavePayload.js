@@ -60,6 +60,91 @@ export function selectEmployeeLeaveBalance(rows, leaveTypeId) {
   );
 }
 
+export function normalizeLeaveHistoryDay(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const map = {};
+  Object.keys(raw).forEach((key) => {
+    map[lowerKey(key)] = raw[key];
+  });
+  return {
+    leaveDate: map.leavedate ?? null,
+    dayType: map.daytype ?? null,
+    leaveDays: map.leavedays == null ? null : Number(map.leavedays),
+    weekendFlag: map.weekendflag ?? null,
+    holidayFlag: map.holidayflag ?? null,
+  };
+}
+
+export function normalizeLeaveHistoryItem(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const map = {};
+  Object.keys(raw).forEach((key) => {
+    map[lowerKey(key)] = raw[key];
+  });
+  const leaveRequestId = Number(map.leaverequestid);
+  if (!(leaveRequestId > 0)) return null;
+  return {
+    leaveRequestId,
+    requestNo: map.requestno ?? null,
+    employeeId: map.employeeid == null ? null : Number(map.employeeid),
+    employeeName: map.employeename ?? null,
+    employeeCode: map.employeecode ?? null,
+    departmentId: map.departmentid == null ? null : Number(map.departmentid),
+    departmentName: map.departmentname ?? null,
+    leaveYear: map.leaveyear == null ? null : Number(map.leaveyear),
+    leaveTypeId: map.leavetypeid == null ? null : Number(map.leavetypeid),
+    leaveTypeCode: map.leavetypecode ?? null,
+    leaveTypeName: map.leavetypename ?? null,
+    leaveReasonId: map.leavereasonid == null ? null : Number(map.leavereasonid),
+    leaveReasonName: map.leavereasonname ?? null,
+    fromDate: map.fromdate ?? null,
+    toDate: map.todate ?? null,
+    fromDayType: map.fromdaytype ?? null,
+    toDayType: map.todaytype ?? null,
+    totalDays: map.totaldays == null ? null : Number(map.totaldays),
+    comments: map.comments ?? null,
+    coveringEmployeeId: map.coveringemployeeid == null ? null : Number(map.coveringemployeeid),
+    coveringEmployeeName: map.coveringemployeename ?? null,
+    status: map.status ?? null,
+    currentApprovalLevel: map.currentapprovallevel == null ? null : Number(map.currentapprovallevel),
+    stage: map.stage ?? null,
+    submittedDate: map.submitteddate ?? null,
+    finalApprovedDate: map.finalapproveddate ?? null,
+    rejectedDate: map.rejecteddate ?? null,
+    cancelledDate: map.cancelleddate ?? null,
+    createdDate: map.createddate ?? null,
+    lastUpdatedDate: map.lastupdateddate ?? null,
+    lastUpdatedByName: map.lastupdatedbyname ?? null,
+    days: asList(map.days).map(normalizeLeaveHistoryDay).filter(Boolean),
+  };
+}
+
+export function normalizeLeaveHistoryPage(payload) {
+  if (Array.isArray(payload)) {
+    const items = payload.map(normalizeLeaveHistoryItem).filter(Boolean);
+    return {
+      viewerRole: null,
+      scope: null,
+      totalCount: items.length,
+      pageNumber: 1,
+      pageSize: items.length,
+      items,
+    };
+  }
+  if (!payload || typeof payload !== "object") {
+    return { viewerRole: null, scope: null, totalCount: 0, pageNumber: 1, pageSize: 50, items: [] };
+  }
+  const items = asList(payload.items ?? payload.data).map(normalizeLeaveHistoryItem).filter(Boolean);
+  return {
+    viewerRole: payload.viewerRole ?? null,
+    scope: payload.scope ?? null,
+    totalCount: Number(payload.totalCount ?? items.length) || 0,
+    pageNumber: Number(payload.pageNumber ?? 1) || 1,
+    pageSize: Number(payload.pageSize ?? 50) || 50,
+    items,
+  };
+}
+
 export function normalizeLeaveQuota(raw) {
   if (!raw || typeof raw !== "object") return null;
   const map = {};

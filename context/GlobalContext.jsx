@@ -10,6 +10,7 @@ import {
   readBiometricPreference,
   saveBiometricPreference,
 } from "../utils/biometrics";
+import { fetchMobileUserProfile } from "../services/mobileProfileService";
 
 const RELOCK_AFTER_MS = 60 * 1000;
 const MAX_TIMER_MS = 2147483647;
@@ -97,6 +98,8 @@ export const GlobalProvider = ({ children }) => {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricPreferenceKnown, setBiometricPreferenceKnown] = useState(true);
   const [clock, setClock] = useState(Date.now());
+  const [mobileProfile, setMobileProfile] = useState(null);
+  const [mobileProfileReady, setMobileProfileReady] = useState(false);
   const queryClient = useQueryClient();
   const employeeIdRef = useRef(null);
   const backgroundedAt = useRef(null);
@@ -105,6 +108,8 @@ export const GlobalProvider = ({ children }) => {
   const employeeId = authData?.employeeId ?? null;
   const companyId = authData?.companyId ?? null;
   const financialYearId = authData?.financialYearId ?? null;
+  const departmentId = authData?.departmentId ?? mobileProfile?.departmentId ?? null;
+  const attLeaveRole = mobileProfile?.role ?? authData?.attLeaveRole ?? null;
   const empId = employeeId;
   const userName = authData?.username ?? authData?.userName ?? null;
   const branchId = authData?.branchId ?? null;
@@ -179,6 +184,8 @@ export const GlobalProvider = ({ children }) => {
     setAuthToken(null);
     setAuthData(null);
     setAccessToken(null);
+    setMobileProfile(null);
+    setMobileProfileReady(false);
     setIsLocked(false);
     setBiometricEnabled(false);
     setBiometricPreferenceKnown(true);
@@ -187,6 +194,49 @@ export const GlobalProvider = ({ children }) => {
     await deleteSecureKey(TOKEN_KEY);
     await deleteSecureKey(LEGACY_AUTH_KEY);
   }, [queryClient]);
+
+  useEffect(() => {
+    let active = true;
+    if (!isAuthenticated || !(Number(userId) > 0)) {
+      setMobileProfile(null);
+      setMobileProfileReady(false);
+      return undefined;
+    }
+
+    setMobileProfileReady(false);
+    fetchMobileUserProfile(userId)
+      .then((profile) => {
+        if (!active) return;
+        setMobileProfile(profile);
+        setMobileProfileReady(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        // Fall back to login role so leave screens still open for the employee.
+        setMobileProfile({
+          userId,
+          employeeId,
+          departmentId: authData?.departmentId ?? null,
+          role: String(authData?.attLeaveRole ?? "EMPLOYEE").toUpperCase(),
+          leaveHistoryScope: null,
+          permissions: {
+            canApplyLeave: true,
+            canViewOwnLeaveHistory: true,
+            canViewLeaveBalance: true,
+            canViewTeamLeave: false,
+            canViewAllLeave: false,
+            canApproveLeave: false,
+            approvalLevel: 0,
+          },
+          screens: ["MY_LEAVE", "APPLY_LEAVE", "MY_BALANCE"],
+        });
+        setMobileProfileReady(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, userId, employeeId, authData?.departmentId, authData?.attLeaveRole]);
 
   const unlock = useCallback(async () => {
     const result = await authenticateWithBiometrics();
@@ -281,6 +331,10 @@ export const GlobalProvider = ({ children }) => {
       empId,
       companyId,
       financialYearId,
+      departmentId,
+      attLeaveRole,
+      mobileProfile,
+      mobileProfileReady,
       userName,
       branchId,
       groupId,
@@ -310,6 +364,10 @@ export const GlobalProvider = ({ children }) => {
       empId,
       companyId,
       financialYearId,
+      departmentId,
+      attLeaveRole,
+      mobileProfile,
+      mobileProfileReady,
       userName,
       branchId,
       groupId,
